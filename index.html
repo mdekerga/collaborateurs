@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Collaborateurs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        #chart { display: flex; justify-content: center; margin-top: 20px; }
+        .arc text { font: 12px sans-serif; text-anchor: middle; fill: white; }
+        .arc path { stroke: #fff; }
+        body {
+            background-color: #e9ecef; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .header-title {
+            text-align: center;
+            margin-top: 20px;
+            color: #333;
+        }
+        .card-custom {
+            background-color: white;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        /* Style des modales */
+        .modal-header { background-color: #343a40; color: white; }
+        .btn-edit { background-color: #28a745; color: white; border: none; } 
+        .btn-delete { background-color: #dc3545; color: white; border: none; } 
+        .btn-add { background-color: #5a6268; color: white; width: 100%; margin-top: 10px; } 
+    </style>
+</head>
+<body>
+
+<h2>Statistiques par Département</h2>
+<div id="chart"></div>
+
+<div class="container">
+    <h2 class="header-title">Gestion des collaborateurs</h2>
+
+    <div class="card-custom">
+        <h4 class="text-center mb-4">Rechercher</h4>
+        <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <label for="filterDept" class="form-label">Filtrer par département</label>
+                <select id="filterDept" class="form-select" onchange="filterCollaborateurs()">
+                    <option value="all">Tous</option>
+                </select>
+            </div>
+            <div class="col-md-8">
+                <label for="searchName" class="form-label">Rechercher par nom</label>
+                <div class="input-group">
+                    <input type="text" id="searchName" class="form-control" placeholder="Rechercher par nom" onkeyup="filterCollaborateurs()">
+                    <button class="btn btn-secondary" type="button" onclick="filterCollaborateurs()">Rechercher</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-custom">
+        <h4 class="text-center mb-4">Détails des Collaborateurs</h4>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead class="table-dark">
+                <tr>
+                    <th>Photo</th>
+                    <th>Matricule</th>
+                    <th>Nom</th>
+                    <th>Prénom</th>
+                    <th>Modifier</th>
+                    <th>Supprimer</th>
+                </tr>
+                </thead>
+                <tbody id="collabTableBody">
+                </tbody>
+            </table>
+        </div>
+        <button class="btn btn-add py-2" onclick="openModal()">Ajouter un collaborateur</button>
+    </div>
+</div>
+
+<div class="modal fade" id="collabModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Ajouter un collaborateur</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="collabForm">
+                    <input type="hidden" id="collabId">
+
+                    <div class="mb-3">
+                        <label for="nom" class="form-label">Nom</label>
+                        <input type="text" class="form-control" id="nom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="prenom" class="form-label">Prénom</label>
+                        <input type="text" class="form-control" id="prenom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="matricule" class="form-label">Matricule</label>
+                        <input type="text" class="form-control" id="matricule" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="departement" class="form-label">Département</label>
+                        <select id="departement" class="form-select" required>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Professionnel</label>
+                        <input type="email" class="form-control" id="email">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="saveCollaborateur()">Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const API_URL = "http://localhost:8080/api";
+    let allCollaborateurs = [];
+    let allDepartements = [];
+    let modalInstance;
+
+
+    document.addEventListener("DOMContentLoaded", () => {
+        modalInstance = new bootstrap.Modal(document.getElementById('collabModal'));
+        loadDepartements();
+        loadCollaborateurs();
+    });
+
+
+    function loadDepartements() {
+        fetch(`${API_URL}/departements`)
+            .then(res => res.json())
+            .then(data => {
+                allDepartements = data;
+                populateDeptSelects();
+            });
+    }
+
+    function loadCollaborateurs() {
+        fetch(`${API_URL}/collaborateurs`)
+            .then(res => res.json())
+            .then(data => {
+                allCollaborateurs = data;
+                renderTable(allCollaborateurs);
+            });
+    }
+
+
+    function populateDeptSelects() {
+        const filterSelect = document.getElementById("filterDept");
+        const formSelect = document.getElementById("departement");
+
+        // Reset sauf l'option "Tous"
+        filterSelect.innerHTML = '<option value="all">Tous</option>';
+        formSelect.innerHTML = '';
+
+        allDepartements.forEach(dept => {
+            // Pour le filtre
+            filterSelect.innerHTML += `<option value="${dept.id}">${dept.nom}</option>`;
+            // Pour le formulaire modal
+            formSelect.innerHTML += `<option value="${dept.id}">${dept.nom}</option>`;
+        });
+    }
+
+
+    function renderTable(data) {
+        const tbody = document.getElementById("collabTableBody");
+        tbody.innerHTML = "";
+
+        data.forEach(c => {
+            const imgUrl = c.photo && c.photo.length > 5 ? c.photo : "https://www.w3schools.com/howto/img_avatar.png";
+
+            const row = `
+                <tr>
+                    <td><img src="${imgUrl}" class="table-img" alt="Photo"></td>
+                    <td>${c.matricule}</td>
+                    <td>${c.nom}</td>
+                    <td>${c.prenom}</td>
+                    <td>
+                        <button class="btn btn-edit btn-sm" onclick="openEditModal(${c.id})">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                    </td>
+                    <td>
+                        <button class="btn btn-delete btn-sm" onclick="deleteCollaborateur(${c.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
+
+
+    function filterCollaborateurs() {
+        const deptId = document.getElementById("filterDept").value;
+        const searchText = document.getElementById("searchName").value.toLowerCase();
+
+        const filtered = allCollaborateurs.filter(c => {
+
+            const matchDept = (deptId === "all") || (c.idDepartement == deptId);
+ 
+            const matchName = c.nom.toLowerCase().includes(searchText) ||
+                              c.prenom.toLowerCase().includes(searchText);
+
+            return matchDept && matchName;
+        });
+
+        renderTable(filtered);
+    }
+
+
+
+    function openModal() {
+        document.getElementById("modalTitle").innerText = "Ajouter un collaborateur";
+        document.getElementById("collabForm").reset();
+        document.getElementById("collabId").value = ""; 
+        modalInstance.show();
+    }
+
+
+    function openEditModal(id) {
+        const collab = allCollaborateurs.find(c => c.id === id);
+        if(collab) {
+            document.getElementById("modalTitle").innerText = `Modifier le collaborateur ${collab.matricule}`;
+            document.getElementById("collabId").value = collab.id;
+            document.getElementById("nom").value = collab.nom;
+            document.getElementById("prenom").value = collab.prenom;
+            document.getElementById("matricule").value = collab.matricule;
+            document.getElementById("departement").value = collab.idDepartement;
+            document.getElementById("email").value = collab.emailPro || "";
+
+            modalInstance.show();
+        }
+    }
+
+
+    function saveCollaborateur() {
+        const id = document.getElementById("collabId").value;
+
+        const collabData = {
+            nom: document.getElementById("nom").value,
+            prenom: document.getElementById("prenom").value,
+            matricule: document.getElementById("matricule").value,
+            idDepartement: parseInt(document.getElementById("departement").value),
+            emailPro: document.getElementById("email").value,
+
+            actif: true
+        };
+
+        let request;
+
+        if (id) {
+            collabData.id = id;
+            request = fetch(`${API_URL}/collaborateurs/${id}`, { 
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(collabData)
+            });
+        } else {
+            request = fetch(`${API_URL}/collaborateurs/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(collabData)
+            });
+        }
+
+        request.then(response => {
+            if(response.ok) {
+                modalInstance.hide();
+                loadCollaborateurs(); 
+            } else {
+                alert("Erreur lors de l'enregistrement");
+            }
+        });
+    }
+
+
+    function deleteCollaborateur(id) {
+        if(confirm("Voulez-vous vraiment supprimer ce collaborateur ?")) {
+            fetch(`${API_URL}/collaborateurs/delete/${id}`, {
+                method: "DELETE"
+            }).then(res => {
+                loadCollaborateurs();
+            });
+        }
+    }
+
+
+    const width = 450, height = 450, margin = 40;
+    const radius = Math.min(width, height) / 2 - margin;
+
+    const svg = d3.select("#chart")
+      .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+      .append("g")
+        .attr("transform", `translate(${width / 2},${height / 2})`);
+
+
+    const color = d3.scaleOrdinal()
+      .range(["#98abc5", "#8a89a6", "#7b6888", "#6b486b", "#a05d56"]);
+
+    const url = "http://localhost:8080/api/collaborateurs/departement/piechart";
+
+    d3.json(url).then(function(data) {
+        console.log("Data Loaded: ", data); 
+
+        const pie = d3.pie()
+            .value(d => d.percent);
+
+        const data_ready = pie(data);
+
+
+        const arcGenerator = d3.arc()
+            .innerRadius(0)
+            .outerRadius(radius);
+
+
+        svg.selectAll('mySlices')
+            .data(data_ready)
+            .join('path')
+            .attr('d', arcGenerator)
+            .attr('fill', d => color(d.data.label))
+            .attr("stroke", "white")
+            .style("stroke-width", "2px")
+            .style("opacity", 0.7);
+
+        svg.selectAll('mySlices')
+            .data(data_ready)
+            .join('text')
+            .text(d => d.data.label + " (" + Math.round(d.data.percent) + "%)")
+            .attr("transform", function(d) { return `translate(${arcGenerator.centroid(d)})`})
+            .style("text-anchor", "middle")
+            .style("font-size", 12);
+    });
+</script>
+
+</body>
+</html>
